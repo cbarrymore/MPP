@@ -155,20 +155,14 @@ void cruzar(Individuo *padre1, Individuo *padre2, Individuo *hijo1, Individuo *h
 	// Inicializar un arry auxiliar para rastrear los genes utilizados 
 	int * genes_usados = (int*) malloc(n*sizeof(int));
 	memset(genes_usados,0,n*sizeof(int));
-
+	for (int j = 0; j < punto_de_corte; j++) {
+			genes_usados[hijo1->array_int[j]] = 1;
+    }
 	// Llenar el resto de hijo1 con genes de padre2 y rastrear su uso
     for (int i = punto_de_corte; i < n; i++) {
         int gen_padre2 = padre2->array_int[i];
-
-        // Verificar si el gen ya se utilizó en hijo1
-        int gen_repetido = 0;
-        for (int j = 0; j < punto_de_corte; j++) {
-            if (hijo1->array_int[j] == gen_padre2) {
-                gen_repetido = 1;
-                break;
-            }
-        }
-		if(!gen_repetido) {
+       
+		if(!genes_usados[gen_padre2]) {
 			hijo1->array_int[i] = gen_padre2;
 			genes_usados[gen_padre2] =1;
 		}
