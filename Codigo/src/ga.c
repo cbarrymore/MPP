@@ -63,7 +63,7 @@ int comp_fitness(const void *a, const void *b) {
 	return (*(Individuo **)a)->fitness - (*(Individuo **)b)->fitness;
 }
 
-double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, int *sol)
+double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, int *sol)
 {
 	int i, g, mutation_start;
 	
@@ -97,7 +97,7 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, int *sol)
 		
 		// muta 3/4 partes de la poblacion
 		for(i = mutation_start; i < tam_pob; i++) {
-			mutar(poblacion[i], n);
+			mutar(poblacion[i], n, m_rate);
 		}
 		
 		// recalcula el fitness del individuo
@@ -213,9 +213,8 @@ void invertir(int *a, int k)
 	// Uno por uno invierte los elementos de a[0..k-1]
 }
 
-void mutar(Individuo *actual, int n)
+void mutar(Individuo *actual, int n, float m_rate)
 {
-        double m_rate = 0.15; // modificar valor si conviene
 		int i;
 		int j;
 		srand(time(NULL) + getpid());
