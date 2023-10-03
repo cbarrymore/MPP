@@ -12,6 +12,6 @@ while read line ; do
 	m_rate=$(echo $line | tr -s ' ' | cut -f4 -d ' ')
 	echo -e >> $out_file
 	echo -n "Executing with: " >> $out_file
-	echo -e "N = "$n" N_GEN = "$gen" TAM_POB = "$tam >> $out_file
-	make test_sec N=$n N_GEN=$gen T_POB=$tam
+	echo -e "N = "$n" N_GEN = "$gen" TAM_POB = "$tam M_RATE=$m_rate >> $out_file
+	make test_sec N=$n N_GEN=$gen T_POB=$tam M_RATE=$m_rate
 done < $in_file
