@@ -66,6 +66,8 @@ int comp_fitness(const void *a, const void *b) {
 double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, int *sol)
 {
 	int i, g, mutation_start;
+	int fitness_anterior = __INT32_MAX__;
+	int criterio = 1;
 	
 	// crea poblacion inicial (array de individuos)
 	Individuo **poblacion = (Individuo **) malloc(tam_pob * sizeof(Individuo *));
@@ -84,7 +86,8 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, 
 	qsort(poblacion, tam_pob, sizeof(Individuo *), comp_fitness);
 	
 	// evoluciona la poblacion durante un numero de generaciones
-	for(g = 0; g < n_gen; g++)
+
+	for(g = 0; g < n_gen && criterio; g++)
 	{
 		// los hijos de los ascendientes mas aptos sustituyen a la ultima mitad de los individuos menos aptos
 		for(i = 0; i < (tam_pob/2) - 1; i += 2) {
@@ -112,6 +115,11 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, 
 			printf("Generacion %d - ", g);
 			printf("Fitness = %.0lf\n", (poblacion[0]->fitness));
 		}
+		if(poblacion[0]->fitness <= (fitness_anterior - fitness_anterior*0.01))
+			fitness_anterior = poblacion[0]->fitness;
+		else
+			criterio=0;
+
 	}
 	
 	memmove(sol, poblacion[0]->array_int, n*sizeof(int));

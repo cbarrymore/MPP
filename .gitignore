@@ -32,5 +32,6 @@
 *.app
 *.txt
 
-#locks
+#locks y demás
 .~lock*
+sec
