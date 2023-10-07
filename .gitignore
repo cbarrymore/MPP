@@ -35,3 +35,5 @@
 #locks y demás
 .~lock*
 sec
+*.odt
+*.json

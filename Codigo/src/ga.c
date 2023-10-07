@@ -2,13 +2,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-
+#include <unistd.h>
+#include <time.h>
+#include <omp.h>
 #include "../include/ga.h"
 
 #define PRINT 1
 
+#pragma omp threadprivate(seed)
+
+int seed;
+
 int aleatorio(int n) {
-	return (rand() % n);  // genera un numero aleatorio entre 0 y n-1
+	return (rand_r(&seed) % n);  // genera un numero aleatorio entre 0 y n-1
 }
 
 int search_element(int *array, int end, int element)
@@ -69,6 +75,8 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, 
 	int fitness_anterior = __INT32_MAX__;
 	int criterio = 1;
 	
+
+	seed = getpid() + (int)time(NULL);
 	// crea poblacion inicial (array de individuos)
 	Individuo **poblacion = (Individuo **) malloc(tam_pob * sizeof(Individuo *));
 	assert(poblacion);
@@ -104,7 +112,7 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, 
 		}
 		
 		// recalcula el fitness del individuo
-		for(i = 0; i < tam_pob; i++) {
+		for(i = 0; i	 < tam_pob; i++) {
 			fitness(d, poblacion[i], n);
 		}
 		
@@ -226,10 +234,10 @@ void mutar(Individuo *actual, int n, float m_rate)
 		int i;
 		int j;
 		srand(time(NULL) + getpid());
-		if ((double) rand() / ((double) RAND_MAX) < m_rate){ //Solo se muta cuando número aleatorio es menor que la tasa de mutación
+		if ((double) rand_r(&seed) / ((double) RAND_MAX) < m_rate){ //Solo se muta cuando número aleatorio es menor que la tasa de mutación
 			//Se establecen aleatoriamente las posiciones i y j
-			j =rand() % n + 1;  // generamos un número aleatorio entre 1 y n
-			i = rand() % (j-1) + 1; // 0 a j-2 <+1> 1 a j-1 generamos un número aleatorio entre 1 y j-1
+			j =rand_r(&seed) % n + 1;  // generamos un número aleatorio entre 1 y n
+			i = rand_r(&seed) % (j-1) + 1; // 0 a j-2 <+1> 1 a j-1 generamos un número aleatorio entre 1 y j-1
 			int swap_aux;
 			//Invertimos en bucle el orden de los elementos en el rango [i,j, aumentando i y reduciendo j 
 			//hasta que i == j, indicando que ya se han invertido todos los elementos.
@@ -266,24 +274,33 @@ double distancia_ij(const double *d, int i, int j, int n)
 void fitness(const double *d, Individuo *individuo, int n)
 {
 	// Determina la calidad del individuo calculando la suma de la distancia entre cada par de ciudades consecutivas en el array
-
 	double suma = 0;
-	int d_i;
-	int d_j;
-	int * ciudades =individuo->array_int; 
-	for(int i = 1; i<n;i++){
-		//Obtenemos los pares de ciudades consecutivas y accedemos a la posición del array que contiene su distancia,
-		//sumandola a la variable suma.
-		d_i = ciudades[i-1];
-		d_j = ciudades[i];
+    int d_i, d_j;
+    int * ciudades = individuo->array_int;
+	omp_set_num_threads(8);
+    #pragma omp parallel private(d_i, d_j) shared(suma	)
+    {
+        #pragma omp for
+        for (int i = 0; i < n; i++) {
+			//Obtenemos los pares de ciudades consecutivas y accedemos a la posición del array que contiene su distancia,
+			//sumandola a la variable suma.
+            d_i = ciudades[i - 1];
+            d_j = ciudades[i];
+			#pragma omp critical
+			{
+				suma += d[d_i*n + d_j];
+			}
+        }
 
-		suma += d[d_i*n + d_j];
-	}
+        
+        	
+    }
 	//Como por simplicidad en la codificación no se incluye el nodo final por coincidir con el origen,
 	// sumamos fuera del bucle la distancia entre la última ciudad y la primera, la cual es el origen.
-	d_i= ciudades[n-1];
+	d_i = ciudades[n - 1];
 	d_j = ciudades[0];
-	suma += d[d_i*n + d_j];
+	suma += d[d_i * n + d_j];
+    
 	//establecemos el valor de fitness del individuo al de suma.
-	individuo->fitness =suma;
+    individuo->fitness = suma;
 }
