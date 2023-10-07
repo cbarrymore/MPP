@@ -286,10 +286,8 @@ void fitness(const double *d, Individuo *individuo, int n)
 			//sumandola a la variable suma.
             d_i = ciudades[i - 1];
             d_j = ciudades[i];
-			#pragma omp critical
-			{
+			#pragma omp atomic
 				suma += d[d_i*n + d_j];
-			}
         }
 
         
