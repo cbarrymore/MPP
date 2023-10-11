@@ -2,10 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-
+#include <unistd.h>
+#include <time.h>
+#include <omp.h>
 #include "../include/ga.h"
 
-#define PRINT 1
+#define PRINT 0
+
+unsigned int seed;
+//#pragma omp threadprivate(seed)
+
+
 
 int aleatorio(int n) {
 	return (rand() % n);  // genera un numero aleatorio entre 0 y n-1
@@ -67,13 +74,21 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, 
 {
 	int i, g, mutation_start;
 	int fitness_anterior = __INT32_MAX__;
-	int criterio = 1;
+	srand(time(NULL));
+
 	
 	// crea poblacion inicial (array de individuos)
 	Individuo **poblacion = (Individuo **) malloc(tam_pob * sizeof(Individuo *));
 	assert(poblacion);
 	
 	// crea cada individuo (array de enteros aleatorios)
+	omp_set_num_threads(16);
+	#pragma omp parallel private(seed)
+	{
+	int threads = omp_get_num_threads();
+	seed = getpid() + (int)time(NULL);
+	
+	#pragma omp for schedule(static,tam_pob/threads)
 	for(i = 0; i < tam_pob; i++) {
 		poblacion[i] = (Individuo *) malloc(sizeof(Individuo));
 		poblacion[i]->array_int = crear_individuo(n);
@@ -81,33 +96,39 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, 
 		// calcula el fitness del individuo
 		fitness(d, poblacion[i], n);
 	}
-	
+	}
+
 	// ordena individuos segun la funcion de bondad (menor "fitness" --> mas aptos)
 	qsort(poblacion, tam_pob, sizeof(Individuo *), comp_fitness);
 	
 	// evoluciona la poblacion durante un numero de generaciones
-
-	for(g = 0; g < n_gen && criterio; g++)
+	for(g = 0; g < n_gen; g++)
 	{
+		
 		// los hijos de los ascendientes mas aptos sustituyen a la ultima mitad de los individuos menos aptos
 		for(i = 0; i < (tam_pob/2) - 1; i += 2) {
 			cruzar(poblacion[i], poblacion[i+1], poblacion[tam_pob/2 + i], poblacion[tam_pob/2 + i + 1], n);
 		}
-		
 		// por ejemplo, inicia la mutacion a partir de 1/4 de la poblacion.
                 // puede haber otras opciones pero dejar el primer individuo sin modificar siempre
 		mutation_start = tam_pob/4;
 		
 		// muta 3/4 partes de la poblacion
-		for(i = mutation_start; i < tam_pob; i++) {
-			mutar(poblacion[i], n, m_rate);
+		omp_set_num_threads(16);
+		#pragma omp parallel
+		{
+			int threads = omp_get_num_threads();
+			#pragma omp for schedule(static,tam_pob/threads)
+			for(i = mutation_start; i < tam_pob; i++) {
+				mutar(poblacion[i], n, m_rate);
+			}
+			
+			// recalcula el fitness del individuo
+			#pragma omp for schedule(static,tam_pob/threads)
+			for(i = 0; i< tam_pob; i++) {
+				fitness(d, poblacion[i], n);
+			}
 		}
-		
-		// recalcula el fitness del individuo
-		for(i = 0; i < tam_pob; i++) {
-			fitness(d, poblacion[i], n);
-		}
-		
 		// ordena individuos segun la funcion de bondad (menor "fitness" --> mas aptos)
 		qsort(poblacion, tam_pob, sizeof(Individuo *), comp_fitness);
 		
@@ -115,23 +136,24 @@ double aplicar_ga(const double *d, int n, int n_gen, int tam_pob, float m_rate, 
 			printf("Generacion %d - ", g);
 			printf("Fitness = %.0lf\n", (poblacion[0]->fitness));
 		}
-		if(poblacion[0]->fitness <= (fitness_anterior - fitness_anterior*0.01))
-			fitness_anterior = poblacion[0]->fitness;
-		else
-			criterio=0;
-
 	}
-	
+
 	memmove(sol, poblacion[0]->array_int, n*sizeof(int));
 	
 	// almacena el mejor valor obtenido para el fitness
 	double value = (poblacion[0]->fitness);
 	
 	// se libera la memoria reservada
-	for(i = 0; i < tam_pob; i++) {
-		free(poblacion[i]->array_int);
-		free(poblacion[i]);
-	} 
+	omp_set_num_threads(16);
+	#pragma omp parallel
+	{
+	int threads = omp_get_num_threads();
+	#pragma omp for schedule(static,tam_pob/threads)
+		for(i = 0; i < tam_pob; i++) {
+			free(poblacion[i]->array_int);
+			free(poblacion[i]);
+		} 
+	}
 	free(poblacion); //Antes solo se liberaba el puntero poblacion, y no tambien el contenido del array
 	
 	// devuelve el valor obtenido para el fitness
@@ -150,33 +172,43 @@ void cruzar(Individuo *padre1, Individuo *padre2, Individuo *hijo1, Individuo *h
         // repetidos de ambos hijos. Si encuentro algún elemento repetido en el hijo, lo cambio por otro que no este el array
 
 	// Establecemos punto de corte aleatorio
-	srand(time(NULL));
+	
+	//srand(time(NULL));
     int punto_de_corte = rand() % (n - 1) + 1; // Rango válido: 1 a n-1
+
+	
 
     // Copiar los primeros genes del padre1 a hijo1 y del padre2 a hijo2
     for (int i = 0; i < punto_de_corte; i++) {
+		
         hijo1->array_int[i] = padre1->array_int[i];
+		
         hijo2->array_int[i] = padre2->array_int[i];
     }
 
-
+	
 	// Inicializar un arry auxiliar para rastrear los genes utilizados 
 	int * genes_usados = (int*) malloc(n*sizeof(int));
 	memset(genes_usados,0,n*sizeof(int));
 	for (int j = 0; j < punto_de_corte; j++) {
 			genes_usados[hijo1->array_int[j]] = 1;
     }
+
 	// Llenar el resto de hijo1 con genes de padre2 y rastrear su uso
     for (int i = punto_de_corte; i < n; i++) {
         int gen_padre2 = padre2->array_int[i];
-       
+		
 		if(!genes_usados[gen_padre2]) {
+			
 			hijo1->array_int[i] = gen_padre2;
+			
 			genes_usados[gen_padre2] =1;
 		}
 		else{
+			
 			for (int j = 0; j < n; j++) {
                 if (!genes_usados[j]) {
+					
                     hijo1->array_int[i] = j;
                     genes_usados[j] = 1;
                     break;
@@ -186,25 +218,25 @@ void cruzar(Individuo *padre1, Individuo *padre2, Individuo *hijo1, Individuo *h
 	}
 
 	memset(genes_usados,0,n*sizeof(int));
+	for (int j = 0; j < punto_de_corte; j++) {
+			genes_usados[hijo2->array_int[j]] = 1;
+    }
+
 	// Llenar el resto de hijo2 con genes de padre1 y rastrear su uso
 	for (int i = punto_de_corte; i < n; i++) {
         int gen_padre1 = padre1->array_int[i];
-
-        // Verificar si el gen ya se utilizó en hijo1
-        int gen_repetido = 0;
-        for (int j = 0; j < punto_de_corte; j++) {
-            if (hijo2->array_int[j] == gen_padre1) {
-                gen_repetido = 1;
-                break;
-            }
-        }
-		if(!gen_repetido) {
+		
+		if(!genes_usados[gen_padre1]) {
+			
 			hijo2->array_int[i] = gen_padre1;
+			
 			genes_usados[gen_padre1] =1;
 		}
 		else{
+			
 			for (int j = 0; j < n; j++) {
                 if (!genes_usados[j]) {
+					
                     hijo2->array_int[i] = j;
                     genes_usados[j] = 1;
                     break;
@@ -212,7 +244,7 @@ void cruzar(Individuo *padre1, Individuo *padre2, Individuo *hijo1, Individuo *h
 			}
 		}
 	}
-
+	
 }
 
 void invertir(int *a, int k)
@@ -223,17 +255,22 @@ void invertir(int *a, int k)
 
 void mutar(Individuo *actual, int n, float m_rate)
 {
-		int i;
+		int x;
 		int j;
-		srand(time(NULL) + getpid());
-		if ((double) rand() / ((double) RAND_MAX) < m_rate){ //Solo se muta cuando número aleatorio es menor que la tasa de mutación
+		//rand(time(NULL));
+		double mut= (double) rand() / ((double) RAND_MAX);
+		if (mut< m_rate){ //Solo se muta cuando número aleatorio es menor que la tasa de mutación
 			//Se establecen aleatoriamente las posiciones i y j
-			j =rand() % n + 1;  // generamos un número aleatorio entre 1 y n
-			i = rand() % (j-1) + 1; // 0 a j-2 <+1> 1 a j-1 generamos un número aleatorio entre 1 y j-1
+			j =(rand() % (n-2)) + 2;  // generamos un número aleatorio entre 2 y n-1
+
+			x = (rand() % (j-1)) + 1; // 0 a j-2 <+1> 1 a j-1 generamos un número aleatorio entre 1 y j-1
+			
+			
 			int swap_aux;
 			//Invertimos en bucle el orden de los elementos en el rango [i,j, aumentando i y reduciendo j 
 			//hasta que i == j, indicando que ya se han invertido todos los elementos.
-			for (int i = i; i<j; i++){
+			
+			for (int i = x; i<j; i++){
 				swap_aux = actual->array_int[i];
 				actual->array_int[i] = actual->array_int[j];
 				actual->array_int[j] = swap_aux;
@@ -266,24 +303,28 @@ double distancia_ij(const double *d, int i, int j, int n)
 void fitness(const double *d, Individuo *individuo, int n)
 {
 	// Determina la calidad del individuo calculando la suma de la distancia entre cada par de ciudades consecutivas en el array
-
 	double suma = 0;
-	int d_i;
-	int d_j;
-	int * ciudades =individuo->array_int; 
-	for(int i = 1; i<n;i++){
-		//Obtenemos los pares de ciudades consecutivas y accedemos a la posición del array que contiene su distancia,
-		//sumandola a la variable suma.
-		d_i = ciudades[i-1];
-		d_j = ciudades[i];
-
-		suma += d[d_i*n + d_j];
-	}
+    int d_i, d_j;
+    int * ciudades = individuo->array_int;
+	omp_set_num_threads(16);
+    #pragma omp parallel private(d_i, d_j) 
+    {
+		#pragma omp for reduction(+:suma)
+        for (int i = 0; i < n; i++) {
+			//Obtenemos los pares de ciudades consecutivas y accedemos a la posición del array que contiene su distancia,
+			//sumandola a la variable suma.
+            d_i = ciudades[i - 1];
+            d_j = ciudades[i];
+			suma += d[d_i*n + d_j];
+        }
+    }
 	//Como por simplicidad en la codificación no se incluye el nodo final por coincidir con el origen,
 	// sumamos fuera del bucle la distancia entre la última ciudad y la primera, la cual es el origen.
-	d_i= ciudades[n-1];
+	d_i = ciudades[n - 1];
 	d_j = ciudades[0];
-	suma += d[d_i*n + d_j];
+	suma += d[d_i * n + d_j];
+    
 	//establecemos el valor de fitness del individuo al de suma.
-	individuo->fitness =suma;
+    individuo->fitness = suma;
+	
 }
